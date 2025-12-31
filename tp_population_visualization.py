@@ -17,6 +17,41 @@ df = pd.read_csv("world_population.csv")
 # Clean column names (replace spaces with underscores)
 df.columns = df.columns.str.replace(" ", "_")
 
+# Fill missing density values
+df["Density_(per_km²)"] = df["Density_(per_km²)"].fillna(
+    df["2022_Population"] / df["Area_(km²)"]
+)
+
+# Add log scale for better visualization
+df["Log_Density"] = np.log10(df["Density_(per_km²)"] + 1)
+
+# Merge Western Sahara into Morocco
+morocco_mask = (df["CCA3"] == "MAR") | (df["CCA3"] == "ESH")
+morocco_combined = df[morocco_mask].copy()
+
+# Sum population columns and area
+pop_cols = ["2022_Population", "2020_Population", "2015_Population", 
+            "2010_Population", "2000_Population", "1990_Population", 
+            "1980_Population", "1970_Population", "Area_(km²)"]
+
+morocco_totals = morocco_combined[pop_cols].sum()
+
+# Update Morocco row with combined data
+df.loc[df["CCA3"] == "MAR", pop_cols] = morocco_totals.values
+
+# Recalculate density for Morocco
+df.loc[df["CCA3"] == "MAR", "Density_(per_km²)"] = (
+    morocco_totals["2022_Population"] / morocco_totals["Area_(km²)"]
+)
+
+# Remove Western Sahara row
+df = df[df["CCA3"] != "ESH"].reset_index(drop=True)
+
+# Fill missing density values
+df["Density_(per_km²)"] = df["Density_(per_km²)"].fillna(
+    df["2022_Population"] / df["Area_(km²)"]
+)
+
 # Display basic information
 print("Dataset Preview:")
 print(df.head())
@@ -58,10 +93,11 @@ fig_population.show()
 fig_density = px.choropleth(
     df,
     locations="CCA3",
-    color="Density_(per_km²)",
+    color="Log_Density",
     hover_name="Country",
+    hover_data={"Density_(per_km²)": ":.2f", "Log_Density": False},
     color_continuous_scale="Viridis",
-    title="World Population Density"
+    title="World Population Density (Log Scale)"
 )
 fig_density.show()
 
@@ -91,7 +127,7 @@ population_values = country_data[
         "2000_Population", "2010_Population", "2015_Population",
         "2020_Population", "2022_Population"
     ]
-].values.flatten()
+].values[0]
 
 # Line chart for population growth
 fig_growth = px.line(
